@@ -45,7 +45,7 @@
 #endif
 
 #if OLED_DISPLAY == 3
-#include <SPI.h>
+    #include <SPI.h>
 #endif
 
 #if (BREWMODE == 2 || ONLYPIDSCALE == 1)
@@ -204,6 +204,8 @@ double brewtime = BREW_TIME;                        // brewtime in s
 double preinfusion = PRE_INFUSION_TIME;             // preinfusion time in s
 double preinfusionpause = PRE_INFUSION_PAUSE_TIME;  // preinfusion pause time in s
 double weightSetpoint = SCALE_WEIGHTSETPOINT;
+float scaleCalibration = SCALE_CALIBRATION;
+double scaleKnownWeight = SCALE_KNOWNWEIGHT;
 
 // PID - values for offline brew detection
 uint8_t useBDPID = 0;
@@ -238,7 +240,9 @@ SysPara<double> sysParaBrewSwTime(&brewtimesoftware, BREW_SW_TIME_MIN, BREW_SW_T
 SysPara<double> sysParaBrewThresh(&brewSensitivity, BD_THRESHOLD_MIN, BD_THRESHOLD_MAX, STO_ITEM_BD_THRESHOLD);
 SysPara<double> sysParaPreInfTime(&preinfusion, PRE_INFUSION_TIME_MIN, PRE_INFUSION_TIME_MAX, STO_ITEM_PRE_INFUSION_TIME);
 SysPara<double> sysParaPreInfPause(&preinfusionpause, PRE_INFUSION_PAUSE_MIN, PRE_INFUSION_PAUSE_MAX, STO_ITEM_PRE_INFUSION_PAUSE);
-SysPara<double> sysParaWeightSetPoint(&weightSetpoint, WEIGHTSETPOINT_MIN, WEIGHTSETPOINT_MAX, STO_ITEM_WEIGHTSETPOINT);
+SysPara<double> sysParaWeightSetpoint(&weightSetpoint, WEIGHTSETPOINT_MIN, WEIGHTSETPOINT_MAX, STO_ITEM_WEIGHTSETPOINT);
+SysPara<float> sysParaScaleCalibration(&scaleCalibration, SCALECALIBRATION_MIN, SCALECALIBRATION_MAX, STO_ITEM_SCALECALIBRATION);
+SysPara<double> sysParaScaleKnownWeight(&scaleKnownWeight, SCALEKNOWNWEIGHT_MIN, SCALEKNOWNWEIGHT_MAX, STO_ITEM_SCALEKNOWNWEIGHT);
 SysPara<double> sysParaPidKpSteam(&steamKp, PID_KP_STEAM_MIN, PID_KP_STEAM_MAX, STO_ITEM_PID_KP_STEAM);
 SysPara<double> sysParaSteamSetPoint(&steamSetPoint, STEAM_SETPOINT_MIN, STEAM_SETPOINT_MAX, STO_ITEM_STEAM_SETPOINT);
 SysPara<uint8_t> sysParaPidOn(&pidON, 0, 1, STO_ITEM_PID_ON);
@@ -264,9 +268,6 @@ double tempChangeRateAverageMin = 0;
 unsigned long timeBrewDetection = 0;
 int isBrewDetected = 0;                 // flag is set if brew was detected
 bool movingAverageInitialized = false;  // flag set when average filter is initialized, also used for sensor check
-
-// Brewing, 1 = Normal Preinfusion , 2 = Scale & Shottimer = 2
-#include "brewscaleini.h"
 
 // Sensor check
 boolean sensorError = false;
@@ -340,7 +341,8 @@ const unsigned long intervalMQTT = 5000;
 
 enum MQTTSettableType {
     tUInt8,
-    tDouble
+    tDouble,
+    tFloat
 };
 
 struct mqttVars_t {
@@ -371,6 +373,9 @@ std::vector<mqttVars_t> mqttVars = {
     {"steamKp", tDouble, PID_KP_STEAM_MIN, PID_KP_STEAM_MAX, (void *)&steamKp},
     {"startKp", tDouble, PID_KP_START_MIN, PID_KP_START_MAX, (void *)&startKp},
     {"startTn", tDouble, PID_TN_START_MIN, PID_TN_START_MAX, (void *)&startTn},
+    {"weightSetpoint", tDouble, WEIGHTSETPOINT_MIN, WEIGHTSETPOINT_MAX, (void *)&weightSetpoint},
+    {"scaleKnownWeight", tDouble, SCALEKNOWNWEIGHT_MIN, SCALEKNOWNWEIGHT_MAX, (void *)&scaleKnownWeight},
+    {"scaleCalibration", tFloat, SCALECALIBRATION_MIN, SCALECALIBRATION_MAX, (void *)&scaleCalibration}
 };
 
 // Embedded HTTP Server
@@ -415,55 +420,6 @@ void getSignalStrength() {
         signalBars = 0;
     }
 }
-
-// Display define & template
-#if OLED_DISPLAY == 1
-    U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, OLED_SCL, OLED_SDA);  // e.g. 1.3"
-#endif
-#if OLED_DISPLAY == 2
-    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, OLED_SCL, OLED_SDA);  // e.g. 0.96"
-#endif
-#if OLED_DISPLAY == 3
-    #define OLED_CS             5
-    #define OLED_DC             2
-    U8G2_SH1106_128X64_NONAME_F_4W_HW_SPI u8g2(U8G2_R0, OLED_CS, OLED_DC, /* reset=*/U8X8_PIN_NONE); // e.g. 1.3"
-#endif
-
-// Update for Display
-unsigned long previousMillisDisplay;  // initialisation at the end of init()
-const unsigned long intervalDisplay = 500;
-
-// Horizontal or vertical display
-#if (OLED_DISPLAY != 0)
-    #if (DISPLAYTEMPLATE < 20)  // horizontal templates
-        #include "display.h"
-    #endif
-
-    #if (DISPLAYTEMPLATE >= 20)  // vertical templates
-        #include "Displayrotateupright.h"
-    #endif
-
-    #if (DISPLAYTEMPLATE == 1)
-        #include "Displaytemplatestandard.h"
-    #endif
-
-    #if (DISPLAYTEMPLATE == 2)
-        #include "Displaytemplateminimal.h"
-    #endif
-
-    #if (DISPLAYTEMPLATE == 3)
-        #include "Displaytemplatetemponly.h"
-    #endif
-
-    #if (DISPLAYTEMPLATE == 4)
-        #include "Displaytemplatescale.h"
-    #endif
-
-    #if (DISPLAYTEMPLATE == 20)
-        #include "Displaytemplateupright.h"
-    #endif
-#endif
-
 
 #if (PRESSURESENSOR == 1)  // Pressure sensor connected
     /**
@@ -638,7 +594,7 @@ void refreshTemp() {
         #if ((PINTEMPSENSOR != 16 && defined(ESP8266)) || defined(ESP32))
             temperature = Sensor2.getTemp();
         #endif
-       
+
     #endif
       // temperature = 94;
             if (machineState != kSteam) {
@@ -659,11 +615,63 @@ void refreshTemp() {
         }
     }
 }
+boolean sys = readSysParamsFromStorage();
+// Brewing, 1 = Normal Preinfusion , 2 = Scale & Shottimer = 2
+#include "brewscaleini.h"
+
+// Display define & template
+#if OLED_DISPLAY == 1
+    U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, OLED_SCL, OLED_SDA);  // e.g. 1.3"
+#endif
+
+#if OLED_DISPLAY == 2
+    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, OLED_SCL, OLED_SDA);  // e.g. 0.96"
+#endif
+
+#if OLED_DISPLAY == 3
+    #define OLED_CS             5
+    #define OLED_DC             2
+    U8G2_SH1106_128X64_NONAME_F_4W_HW_SPI u8g2(U8G2_R0, OLED_CS, OLED_DC, /* reset=*/U8X8_PIN_NONE); // e.g. 1.3"
+#endif
+
+// Update for Display
+unsigned long previousMillisDisplay;  // initialisation at the end of init()
+const unsigned long intervalDisplay = 500;
+
+// Horizontal or vertical display
+#if (OLED_DISPLAY == 1 || OLED_DISPLAY == 2)
+    #if (DISPLAYTEMPLATE < 20)  // horizontal templates
+        #include "display.h"
+    #endif
+
+    #if (DISPLAYTEMPLATE >= 20)  // vertical templates
+        #include "Displayrotateupright.h"
+    #endif
+
+    #if (DISPLAYTEMPLATE == 1)
+        #include "Displaytemplatestandard.h"
+    #endif
+
+    #if (DISPLAYTEMPLATE == 2)
+        #include "Displaytemplateminimal.h"
+    #endif
+
+    #if (DISPLAYTEMPLATE == 3)
+        #include "Displaytemplatetemponly.h"
+    #endif
+
+    #if (DISPLAYTEMPLATE == 4)
+        #include "Displaytemplatescale.h"
+    #endif
+
+    #if (DISPLAYTEMPLATE == 20)
+        #include "Displaytemplateupright.h"
+    #endif
+#endif
 
 
-#include "brewvoid.h"
 #include "scalevoid.h"
-
+#include "brewvoid.h"
 /**
  * @brief Switch to offline mode if maxWifiReconnects were exceeded during boot
  */
@@ -989,6 +997,10 @@ void assignMQTTParam(char *param, double value) {
                         *(uint8_t *)m.mqttVarPtr = value;
                         paramValid = true;
                         break;
+                    case tFloat:
+                        *(float *)m.mqttVarPtr = value;
+                        paramValid = true;
+                        break;
                     default:
                         debugPrintln((String(m.type) + " is not a recognized type for this MQTT parameter.").c_str());
                 }
@@ -1195,7 +1207,7 @@ void handleMachineState() {
 
                         break;
                     }
-                    
+
                     // 10 sec temperature above BrewSetPoint, no set new state
                     if (machinestatecoldmillis + 10 * 1000 < millis()) {
                         machineState = kBelowSetPoint;
@@ -1653,7 +1665,7 @@ void websiteSetup() {
 const char sysVersion[] = (STR(FW_VERSION) "." STR(FW_SUBVERSION) "." STR(FW_HOTFIX) " " FW_BRANCH);
 
 void setup() {
-    editableVars =  {
+    editableVars = {
         //#1
         {F("PID_ON"), "Enable PID Controller", false, "", kUInt8, 0, []{ return true; }, 0, 1, (void *)&pidON},
 
@@ -1730,6 +1742,12 @@ void setup() {
         {F("BACKFLUSH_ON"), F("Backflush"), false, "", kUInt8, sOtherSection, []{ return false; }, 0, 1, (void *)&backflushON},
 
         //#26
+        {F("SCALE_CALIBRATION"), F("Scale Calibration"), true, F("Calibration Value for the Scale."), kFloat, sBDSection, []{ return true && BREWDETECTION > 0 && (useBDPID || BREWDETECTION == 1); }, BREW_SW_TIME_MIN, BREW_SW_TIME_MAX, (void *)&scaleCalibration},
+
+        //#27
+        {F("SCALE_KNOWNWEIGHT"), F("Scale Known Weight"), true, F("Calibration Weight for the Scale."), kFloat, sBDSection, []{ return true && BREWDETECTION > 0 && (useBDPID || BREWDETECTION == 1); }, SCALEKNOWNWEIGHT_MIN, SCALEKNOWNWEIGHT_MAX, (void *)&scaleKnownWeight},
+
+        //#28
         {F("VERSION"), F("Version"), false, "", kCString, sOtherSection, []{ return false; }, 0, 1, (void *)sysVersion}
     };
     //when adding parameters, update EDITABLE_VARS_LEN!
@@ -1821,11 +1839,6 @@ void setup() {
        // delay(2000); // caused crash with wifi manager
     #endif
 
-    // Init Scale by BREWMODE 2 or SHOTTIMER 2
-    #if (BREWMODE == 2 || ONLYPIDSCALE == 1)
-        initScale();
-    #endif
-
     // VL530L0x TOF sensor
     #if TOF == 1
         lox.begin(tof_i2c);  // initialize TOF sensor at I2C address
@@ -1860,8 +1873,8 @@ void setup() {
                 influxClient.setConnectionParamsV1(INFLUXDB_URL, INFLUXDB_DB_NAME, INFLUXDB_USER, INFLUXDB_PASSWORD);
             }
         }
-    } else if (connectmode == 0) 
-    { 
+    } else if (connectmode == 0)
+    {
         wm.disconnect(); // no wm
         readSysParamsFromStorage(); // get values from stroage
         offlineMode = 1 ; //offline mode
@@ -1918,6 +1931,11 @@ void setup() {
     #endif
     #if (PRESSURESENSOR == 1)
         previousMillisPressure = currentTime;
+    #endif
+
+    // Init Scale by BREWMODE 2 or SHOTTIMER 2
+    #if (BREWMODE == 2 || ONLYPIDSCALE == 1)
+        initScale();
     #endif
 
     setupDone = true;
@@ -2022,6 +2040,9 @@ void looppid() {
     if ((millis() - lastTempEvent) > tempEventInterval) {
         //send temperatures to website endpoint
         sendTempEvent(temperature, brewSetPoint, pidOutput);
+        #if (ONLYPIDSCALE == 1)
+            sendWeightEvent(weight, weightBrew, 22.22);
+        #endif
         lastTempEvent = millis();
 
         #if VERBOSE
@@ -2279,12 +2300,14 @@ int readSysParamsFromStorage(void) {
     if (sysParaBrewThresh.getStorage() != 0) return -1;
     if (sysParaPreInfTime.getStorage() != 0) return -1;
     if (sysParaPreInfPause.getStorage() != 0) return -1;
-    if (sysParaWeightSetPoint.getStorage() != 0) return -1;
+    if (sysParaWeightSetpoint.getStorage() != 0) return -1;
     if (sysParaPidOn.getStorage() != 0) return -1;
     if (sysParaPidKpSteam.getStorage() != 0) return -1;
     if (sysParaSteamSetPoint.getStorage() != 0) return -1;
     if (sysParaUsePonM.getStorage() != 0) return -1;
     if (sysParaUseBDPID.getStorage() != 0) return -1;
+    if (sysParaScaleCalibration.getStorage() != 0) return -1;
+    if (sysParaScaleKnownWeight.getStorage() != 0) return -1;
 
     return 0;
 }
@@ -2310,13 +2333,15 @@ int writeSysParamsToStorage(void) {
     if (sysParaBrewThresh.setStorage() != 0) return -1;
     if (sysParaPreInfTime.setStorage() != 0) return -1;
     if (sysParaPreInfPause.setStorage() != 0) return -1;
-    if (sysParaWeightSetPoint.setStorage() != 0) return -1;
+    if (sysParaWeightSetpoint.setStorage() != 0) return -1;
     if (sysParaPidKpSteam.setStorage() != 0) return -1;
     if (sysParaSteamSetPoint.setStorage() != 0) return -1;
     if (sysParaUseBDPID.setStorage() != 0) return -1;
     if (sysParaPidKpBd.setStorage() != 0) return -1;
     if (sysParaPidTnBd.setStorage() != 0) return -1;
     if (sysParaPidTvBd.setStorage() != 0) return -1;
+    if (sysParaScaleCalibration.setStorage() != 0) return -1;
+    if (sysParaScaleKnownWeight.setStorage() != 0) return -1;
 
     return storageCommit();
 }
@@ -2350,6 +2375,16 @@ void writeSysParamsToMQTT(void) {
             mqtt_publish("preinfusion", number2string(preinfusion));
             mqtt_publish("steamON", number2string(steamON));
             mqtt_publish("backflushON", number2string(backflushON));
+
+            // Scale Parameters
+            #if (ONLYPIDSCALE == 1)
+                mqtt_publish("weightPreBrew", number2string(weightPreBrew));
+                mqtt_publish("weight", number2string(weight));
+                mqtt_publish("weightBrew", number2string(weightBrew));
+                mqtt_publish("scaleCalibration", number2string(scaleCalibration));
+                mqtt_publish("scaleKnownWeight", number2string(scaleKnownWeight));
+                mqtt_publish("scaleCalFactor", number2string(LoadCell.getCalFactor()));
+            #endif
 
             // Normal PID
             mqtt_publish("aggKp", number2string(aggKp));

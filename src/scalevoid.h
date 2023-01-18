@@ -36,17 +36,28 @@ void checkWeight() {
  * @brief Initialize scale
  */
 void initScale() {
-    LoadCell.begin();
-    long stabilizingtime = 2000; // tare preciscion can be improved by adding a few seconds of stabilizing time
+    String scaleCalibrationString = number2string(scaleCalibration);
+    String stringCompare = "1.00";
+    boolean calibration = false;
+    LoadCell.begin(128);
+    long stabilizingtime = 4000; // tare preciscion can be improved by adding a few seconds of stabilizing time
     boolean _tare = true; //set this to false if you don't want tare to be performed in the next step
 
     u8g2.clearBuffer();
     u8g2.drawStr(0, 2, "Taring scale,");
     u8g2.drawStr(0, 12, "remove any load!");
-    u8g2.drawStr(0, 22, "....");
-    delay(2000);
+    
+    if(scaleCalibrationString == stringCompare){
+        u8g2.drawStr(0, 22, "Calibration coming up");
+        calibration = true;
+    }
+    else{
+        u8g2.drawStr(0, 22, "....");
+    }
+    delay(1000);
     u8g2.sendBuffer();
-    LoadCell.start(stabilizingtime, _tare);
+    LoadCell.start(stabilizingtime);
+    LoadCell.tare();
 
     if (LoadCell.getTareTimeoutFlag()) {
         debugPrintln("Timeout, check MCU>HX711 wiring and pin designations");
@@ -56,11 +67,36 @@ void initScale() {
         u8g2.sendBuffer();
     }
     else {
-        u8g2.drawStr(0, 32, "done.");
-        u8g2.sendBuffer();
+        if(calibration){
+            LoadCell.setCalFactor(1.0);
+            u8g2.clearBuffer();
+            u8g2.drawStr(0, 2, "Calibration in progress.");
+            u8g2.drawStr(0, 12, "Place known weight on");
+            u8g2.drawStr(0, 22, "scale in next 10 seconds ");
+            
+            u8g2.drawStr(0, 32, number2string(scaleKnownWeight));
+            u8g2.sendBuffer();
+            LoadCell.tare();
+            delay(10000);
+            LoadCell.refreshDataSet();
+            float newCalibrationValue = LoadCell.getNewCalibration(scaleKnownWeight);
+            LoadCell.setCalFactor(newCalibrationValue);
+            scaleCalibration = newCalibrationValue;
+            u8g2.clearBuffer();
+            u8g2.drawStr(0, 2, "Calibration done.");
+            u8g2.drawStr(0, 12, "New Calibration factor:");
+            u8g2.drawStr(0, 22, number2string(scaleKnownWeight));
+            u8g2.drawStr(0, 32, number2string(LoadCell.getCalFactor()));
+            u8g2.sendBuffer();
+            delay(5000);
+        }
+        else {
+            u8g2.drawStr(0, 42, "done.");
+            delay(2000);
+            u8g2.sendBuffer();
+        }
     }
-
-    LoadCell.setCalFactor(calibrationValue); // set calibration factor (float)
+    LoadCell.setCalFactor(scaleCalibration); // set calibration factor (float)
     LoadCell.setSamplesInUse(SCALE_SAMPLES);
 }
 
