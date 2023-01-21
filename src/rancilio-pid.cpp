@@ -185,6 +185,9 @@ char *number2string(float in);
 char *number2string(int in);
 char *number2string(unsigned int in);
 float filterPressureValue(float input);
+#if (ONLYPIDSCALE == 1 || BREWMODE == 2)
+    void setTareMode(int tareMode);
+#endif
 
 // system parameters
 uint8_t pidON = 0;                 // 1 = control loop in closed loop
@@ -261,6 +264,7 @@ boolean setupDone = false;
 int backflushON = 0;             // 1 = backflush mode active
 int flushCycles = 0;             // number of active flush cycles
 int backflushState = 10;         // counter for state machine
+int tareON = 0;            // 1 = Tare will be executed. Will be set to false afterwards
 
 // Moving average for software brew detection
 double tempRateAverage = 0;             // average value of temp values
@@ -375,7 +379,8 @@ std::vector<mqttVars_t> mqttVars = {
     {"startTn", tDouble, PID_TN_START_MIN, PID_TN_START_MAX, (void *)&startTn},
     {"weightSetpoint", tDouble, WEIGHTSETPOINT_MIN, WEIGHTSETPOINT_MAX, (void *)&weightSetpoint},
     {"scaleKnownWeight", tDouble, SCALEKNOWNWEIGHT_MIN, SCALEKNOWNWEIGHT_MAX, (void *)&scaleKnownWeight},
-    {"scaleCalibration", tFloat, SCALECALIBRATION_MIN, SCALECALIBRATION_MAX, (void *)&scaleCalibration}
+    {"scaleCalibration", tFloat, SCALECALIBRATION_MIN, SCALECALIBRATION_MAX, (void *)&scaleCalibration},
+    {"tareON", tUInt8, 0, 1, (void *)&tareON}
 };
 
 // Embedded HTTP Server
@@ -1745,6 +1750,9 @@ void setup() {
         {F("SCALE_KNOWNWEIGHT"), F("Scale Known Weight"), true, F("Calibration Weight for the Scale."), kFloat, sBDSection, []{ return true && BREWDETECTION > 0 && (useBDPID || BREWDETECTION == 1); }, SCALEKNOWNWEIGHT_MIN, SCALEKNOWNWEIGHT_MAX, (void *)&scaleKnownWeight},
 
         //#28
+        {F("TARE_ON"), F("Tare On"), false, "", kUInt8, sOtherSection, []{ return false; }, 0, 1, (void *)&tareON},
+
+        //#29
         {F("VERSION"), F("Version"), false, "", kCString, sOtherSection, []{ return false; }, 0, 1, (void *)sysVersion}
     };
     //when adding parameters, update EDITABLE_VARS_LEN!
@@ -2230,6 +2238,14 @@ void setSteamMode(int steamMode) {
     }
 }
 
+#if (ONLYPIDSCALE == 1 || BREWMODE == 2)
+    void setTareMode(int tareMode) {
+        if (tareON == 1) {
+            tarescale(false);
+        }
+    }
+#endif
+
 void setPidStatus(int pidStatus) {
     pidON = pidStatus;
     writeSysParamsToStorage();
@@ -2375,13 +2391,14 @@ void writeSysParamsToMQTT(void) {
             mqtt_publish("backflushON", number2string(backflushON));
 
             // Scale Parameters
-            #if (ONLYPIDSCALE == 1)
+            #if (ONLYPIDSCALE == 1 || BREWMODE == 2)
                 mqtt_publish("weightPreBrew", number2string(weightPreBrew));
                 mqtt_publish("weight", number2string(weight));
                 mqtt_publish("weightBrew", number2string(weightBrew));
                 mqtt_publish("scaleCalibration", number2string(scaleCalibration));
                 mqtt_publish("scaleKnownWeight", number2string(scaleKnownWeight));
                 mqtt_publish("scaleCalFactor", number2string(LoadCell.getCalFactor()));
+                mqtt_publish("tareON", number2string(tareON));
             #endif
 
             // Normal PID

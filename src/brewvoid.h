@@ -223,15 +223,20 @@ void backflush() {
 void brew() {
     if (OnlyPID == 0) {
         unsigned long currentMillistemp = millis();
+        double brewDelay = 0;
         checkbrewswitch();
 
         if (brewswitch == LOW && brewcounter > 10) {
             // abort function for state machine from every state
             debugPrintln("Brew stopped manually");
+            // Shot timer with or without scale
+            #if (ONLYPIDSCALE == 1 || BREWMODE == 2)
+                brewDelay = timeBrewed + scaleDelayValue;
+            #endif
             brewcounter = 43;
         }
 
-        if (brewcounter > 10 && brewcounter < 43) {
+        if (brewcounter > 10 && brewcounter < 44) {
             timeBrewed = currentMillistemp - startingTime;
         }
 
@@ -314,24 +319,28 @@ void brew() {
                 debugPrintln("Brew stopped");
                 digitalWrite(PINVALVE, relayOFF);
                 digitalWrite(PINPUMP, relayOFF);
+                #if (ONLYPIDSCALE == 1 || BREWMODE == 2)
+                    brewDelay = timeBrewed + scaleDelayValue;
+                #endif
                 brewcounter = 43;
-                timeBrewed = 0;
-
                 break;
 
             case 43:  // waiting for brewswitch off position
                 if (brewswitch == LOW) {
                     digitalWrite(PINVALVE, relayOFF);
                     digitalWrite(PINPUMP, relayOFF);
-
-                    // disarmed button
-                    currentMillistemp = 0;
-                    brewDetected = 0;  // rearm brewDetection
-                    brewcounter = 10;
-                    timeBrewed = 0;
+                    if (timeBrewed > brewDelay ){
+                        // disarmed button
+                        currentMillistemp = 0;
+                        brewDetected = 0;  // rearm brewDetection
+                        brewcounter = 10;
+                        timeBrewed = 0;
+                    }
                 }
 
                 break;
+
+            break;
         }
     }
 }
