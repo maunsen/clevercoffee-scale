@@ -34,7 +34,7 @@ unsigned long previousMillistempanalogreading;      // ms for analogreading
     float weight = 0;                                   // value from HX711
     float weightPreBrew = 0;                            // value of scale before wrew started
     float weightBrew = 0;                               // weight value of brew
-    float scaleDelayValue = 3.5;                        // value in gramm that takes still flows onto the scale after brew is stopped / value in seconds that the scale still measures after a shot
+    float scaleDelayValue = 5;                          // value in gramm that takes still flows onto the scale after brew is stopped / value in seconds that the scale still measures after a shot
     bool scaleFailure = false;
     const unsigned long intervalWeight = 200;           // weight scale
     unsigned long previousMillisScale;                  // initialisation at the end of init()

@@ -32,6 +32,20 @@ void checkWeight() {
     }
 }
 
+void displayCountDown(int startValue = 10) {
+    while (startValue >= 0 ){
+            u8g2.clearBuffer();
+            u8g2.drawStr(0, 2, "Calibration in progress.");
+            u8g2.drawStr(0, 12, "Place known weight of");
+            u8g2.drawStr(0, 22, number2string(scaleKnownWeight));
+            u8g2.drawStr(0, 32, "on scale in next");
+            u8g2.drawStr(0, 42, number2string(startValue));
+            u8g2.sendBuffer();
+        startValue--;
+        delay(1000);
+    }
+}
+
 /**
  * @brief Call tare function
 */
@@ -51,23 +65,19 @@ void tarescale(boolean calibration=false) {
     else {
         if (calibration){
             LoadCell.setCalFactor(1.0);
-            u8g2.clearBuffer();
-            u8g2.drawStr(0, 2, "Calibration in progress.");
-            u8g2.drawStr(0, 12, "Place known weight on");
-            u8g2.drawStr(0, 22, "scale in next 10 seconds ");
-            u8g2.drawStr(0, 32, number2string(scaleKnownWeight));
-            u8g2.sendBuffer();
             LoadCell.tare();
-            delay(10000);
+            displayCountDown(10);
+            delay(300);
+            u8g2.clearBuffer();
+            u8g2.drawStr(0, 2, "Calibration running...");
+            u8g2.sendBuffer();
             LoadCell.refreshDataSet();
-            float newCalibrationValue = LoadCell.getNewCalibration(scaleKnownWeight);
-            LoadCell.setCalFactor(newCalibrationValue);
-            scaleCalibration = newCalibrationValue;
+            scaleCalibration = LoadCell.getNewCalibration(scaleKnownWeight);
+            LoadCell.setCalFactor(scaleCalibration); // set calibration factor (float)
             writeSysParamsToStorage();
             u8g2.clearBuffer();
             u8g2.drawStr(0, 2, "Calibration done.");
-            u8g2.drawStr(0, 12, "New Calibration factor:");
-            u8g2.drawStr(0, 22, number2string(scaleKnownWeight));
+            u8g2.drawStr(0, 12, "New calibration factor:");
             u8g2.drawStr(0, 32, number2string(LoadCell.getCalFactor()));
             u8g2.sendBuffer();
             delay(5000);
@@ -78,11 +88,8 @@ void tarescale(boolean calibration=false) {
             u8g2.sendBuffer();
         }
     }
-    if (tareON == 1) {
-        tareON = 0;
-    }
 }
-
+ 
 /**
  * @brief Initialize scale
  */
@@ -107,7 +114,6 @@ void initScale() {
     u8g2.sendBuffer();
     LoadCell.start(stabilizingtime);
     tarescale(calibration);
-    LoadCell.setCalFactor(scaleCalibration); // set calibration factor (float)
     LoadCell.setSamplesInUse(SCALE_SAMPLES);
 }
 
@@ -115,10 +121,15 @@ void initScale() {
  * @brief Scale with shot timer
  */
 void shottimerscale() {
+    int tareDone = 0;
     switch (shottimercounter)  {
         case 10:    // waiting step for brew switch turning on
-        //Leave time to place a cup under the portafilter
-            if (timeBrewed >= 3000) {
+        //Leave time to place a cup under the portafilter and do a tare befor brew
+            if (timeBrewed > 0 && < 3000 && tareDone = 0){
+                LoadCell.tare();
+                tareDone = 1;
+            }
+            if (timeBrewed >= 6000) {
                 weightPreBrew = weight;
                 shottimercounter = 20;
             }

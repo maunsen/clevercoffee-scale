@@ -320,7 +320,7 @@ void brew() {
                 digitalWrite(PINVALVE, relayOFF);
                 digitalWrite(PINPUMP, relayOFF);
                 #if (ONLYPIDSCALE == 1 || BREWMODE == 2)
-                    brewDelay = timeBrewed + scaleDelayValue;
+                    brewDelay = timeBrewed + scaleDelayValue * 1000;
                 #endif
                 brewcounter = 43;
                 break;
